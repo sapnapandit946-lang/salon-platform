@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Scissors, Sparkles, Scale, User as UserIcon, LogOut, Calendar, Heart, LayoutDashboard, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useComparison } from '../context/ComparisonContext';
+import { subscribeBackendStatus } from '../services/api';
 import AuthModal from './AuthModal';
 
 export default function Navbar() {
@@ -10,8 +11,13 @@ export default function Navbar() {
   const { count: compareCount } = useComparison();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [backendLive, setBackendLive] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    return subscribeBackendStatus(setBackendLive);
+  }, []);
 
   const isActive = (path) => location.pathname === path;
 
@@ -105,6 +111,26 @@ export default function Navbar() {
 
           {/* Right Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {backendLive === false && (
+              <span
+                title="FastAPI backend is not running on port 8000. Data is seamlessly served from local demo store. Run start_all.bat to connect live database."
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  border: '1px solid #fcd34d',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'help'
+                }}
+              >
+                ⚡ Demo Mode
+              </span>
+            )}
             {isAuthenticated ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {isSalonOwner ? (

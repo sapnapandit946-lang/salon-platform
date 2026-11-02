@@ -1,12 +1,17 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+import logging
 import os
 from contextlib import asynccontextmanager
+from fastapi import FastAPI, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
-from app.models import ServiceCategory
+from app.models import Salon
 from app.api.v1.api import api_router
+from app.core.seeder import seed_database
+
+logger = logging.getLogger("salon.main")
 
 # Ensure uploads directory exists
 uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
@@ -19,21 +24,14 @@ async def lifespan(app: FastAPI):
     # Initialize database tables
     Base.metadata.create_all(bind=engine)
 
-    # Seed default service categories if not already present
+    # Automatically self-heal / seed sample data if database is empty
     db = SessionLocal()
     try:
-        if db.query(ServiceCategory).count() == 0:
-            default_categories = [
-                ServiceCategory(name="Hair Care & Styling", slug="hair-care", icon="Scissors", display_order=1),
-                ServiceCategory(name="Beard & Shaving", slug="beard-shaving", icon="Smile", display_order=2),
-                ServiceCategory(name="Hair Coloring & Highlights", slug="hair-coloring", icon="Palette", display_order=3),
-                ServiceCategory(name="Hair Treatments & Spa", slug="hair-treatments", icon="Sparkles", display_order=4),
-                ServiceCategory(name="Skin Care & Facials", slug="skin-facials", icon="Sun", display_order=5),
-                ServiceCategory(name="Bridal & Event Makeup", slug="bridal-makeup", icon="Heart", display_order=6),
-                ServiceCategory(name="Nails & Pedicure", slug="nails-pedicure", icon="CheckCircle", display_order=7),
-            ]
-            db.add_all(default_categories)
-            db.commit()
+        if db.query(Salon).count() == 0:
+            logger.info("Empty database detected on startup. Seeding demonstration data...")
+            seed_database(db=db)
+    except Exception as exc:
+        logger.error("Failed to seed initial data on startup: %s", exc)
     finally:
         db.close()
 
@@ -65,10 +63,33 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health", tags=["Health"])
-def health_check():
-    """Verify backend API operational status and database connection."""
+def health_check(response: Response):
+    """
+    Verify backend operational health and active database connectivity.
+    Accurately reports database status and loaded record count; returns HTTP 503 if DB is unreachable.
+    """
+    db_status = "unknown"
+    salon_count = 0
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        salon_count = db.query(Salon).count()
+        db_status = "connected"
+    except Exception as exc:
+        db_status = f"disconnected: {str(exc)}"
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        logger.error("Health check failed database ping: %s", exc)
+    finally:
+        db.close()
+
+    is_healthy = db_status == "connected"
     return {
-        "status": "healthy",
+        "status": "healthy" if is_healthy else "unhealthy",
+        "database": {
+            "status": db_status,
+            "dialect": engine.dialect.name,
+            "salons_loaded": salon_count
+        },
         "service": settings.PROJECT_NAME,
         "environment": settings.ENVIRONMENT,
         "ai_provider": settings.AI_PROVIDER,

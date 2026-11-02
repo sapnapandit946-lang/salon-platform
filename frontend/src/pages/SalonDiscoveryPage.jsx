@@ -283,8 +283,16 @@ export default function SalonDiscoveryPage() {
             gap: '12px'
           }}>
             <div style={{ fontSize: '0.9rem', color: '#475569', fontWeight: 600 }}>
-              Found <strong style={{ color: '#0f172a' }}>{salons.length}</strong> matching salon{salons.length === 1 ? '' : 's'}
-              {serviceName && <span> for <em>"{serviceName}"</em></span>}
+              {error ? (
+                <span style={{ color: '#dc2626' }}>Service connection issue</span>
+              ) : loading ? (
+                <span>Searching salons...</span>
+              ) : (
+                <>
+                  Found <strong style={{ color: '#0f172a' }}>{salons.length}</strong> matching salon{salons.length === 1 ? '' : 's'}
+                  {serviceName && <span> for <em>"{serviceName}"</em></span>}
+                </>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
